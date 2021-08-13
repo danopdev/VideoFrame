@@ -1,6 +1,7 @@
 package com.dan.videoframe
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -165,14 +166,11 @@ class MainActivity : AppCompatActivity() {
             frameBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
             outputStream.close()
 
+            val values = ContentValues()
             @Suppress("DEPRECATION")
-            val newUri = MediaStore.Images.Media.insertImage(
-                    contentResolver,
-                    fileFullPath,
-                    fileName,
-                    "Video Frame"
-            )
-
+            values.put(MediaStore.Images.Media.DATA, fileFullPath)
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            val newUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
             success = newUri != null
         } catch (e: Exception) {
             e.printStackTrace()
