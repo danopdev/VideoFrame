@@ -5,8 +5,14 @@ import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaMetadataRetriever
+import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
@@ -15,6 +21,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.widget.SeekBar
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -40,11 +47,11 @@ class MainActivity : AppCompatActivity() {
     private val binding: ActivityMainBinding by lazy { ActivityMainBinding.inflate(layoutInflater) }
     private var videoUri: Uri? = null
     private var videoName  = ""
-    private var nbOfFrames = 0
-    private val mediaMetadataRetriever = MediaMetadataRetriever()
-    private var frameIndex = 0
-    private var frameBitamp: Bitmap? = null
+    private var videoDuration = 0
+    private var videoPosition = 0
     private var saveFrameMenuItem: MenuItem? = null
+    private var mediaPlayer: MediaPlayer? = null
+    private var mediaMetadataRetriever = MediaMetadataRetriever()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -101,10 +108,13 @@ class MainActivity : AppCompatActivity() {
         else fatalError("You must allow permissions !")
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun onPermissionsAllowed() {
+        BusyDialog.create(this)
+
         binding.seekBarPosition.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, p2: Boolean) {
-                setFrameIndex(progress)
+                setVideoPosition(progress)
             }
 
             override fun onStartTrackingTouch(p0: SeekBar?) {
@@ -115,12 +125,22 @@ class MainActivity : AppCompatActivity() {
 
         })
 
-        binding.buttonSubMax.setOnClickListener { shiftFrameIndex(-30) }
-        binding.buttonSubMed.setOnClickListener { shiftFrameIndex(-5) }
-        binding.buttonSubMin.setOnClickListener { shiftFrameIndex(-1) }
-        binding.buttonAddMin.setOnClickListener { shiftFrameIndex(1) }
-        binding.buttonAddMed.setOnClickListener { shiftFrameIndex(5) }
-        binding.buttonAddMax.setOnClickListener { shiftFrameIndex(30) }
+        binding.buttonSubMax.setOnClickListener { shiftVideoPosition(-2000) }
+        binding.buttonSubMed.setOnClickListener { shiftVideoPosition(-500) }
+        binding.buttonSubMin.setOnClickListener { shiftVideoPosition(-33) }
+        binding.buttonAddMin.setOnClickListener { shiftVideoPosition(33) }
+        binding.buttonAddMed.setOnClickListener { shiftVideoPosition(500) }
+        binding.buttonAddMax.setOnClickListener { shiftVideoPosition(2000) }
+
+        binding.videoView.setAudioFocusRequest(AudioManager.AUDIOFOCUS_NONE)
+        binding.videoView.setOnPreparedListener { newMediaPlayer ->
+            newMediaPlayer.setVolume(0.0f, 0.0f)
+            videoDuration = newMediaPlayer.duration
+            saveFrameMenuItem?.isEnabled = true
+            mediaPlayer = newMediaPlayer
+            updateAll()
+            Log.i("[Video]", "duration: $videoDuration")
+        }
 
         setContentView(binding.root)
     }
@@ -128,7 +148,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.app_menu, menu)
         saveFrameMenuItem = menu?.findItem(R.id.menuSaveFrame)
-        saveFrameMenuItem?.isEnabled = null != frameBitamp
+        saveFrameMenuItem?.isEnabled = null != videoUri && videoDuration > 0
         return true
     }
 
@@ -145,7 +165,7 @@ class MainActivity : AppCompatActivity() {
         if (resultCode == RESULT_OK) {
             if (requestCode == INTENT_OPEN_VIDEO) {
                 intent?.data?.let { uri -> openVideo(uri) }
-                return;
+                return
             }
         }
 
@@ -153,31 +173,41 @@ class MainActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, intent)
     }
 
-    private fun handleSaveFrame() {
-        val frameBitmap = this.frameBitamp ?: return
-        val fileName = "frame_${System.currentTimeMillis()}.png"
-        @Suppress("DEPRECATION")
-        val picturesDirectory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-        val fileFullPath = "$picturesDirectory/$fileName"
+    private fun saveFrame() {
         var success = false
+        val fileName = "frame_${System.currentTimeMillis()}.png"
 
         try {
-            val outputStream = File(fileFullPath).outputStream()
-            frameBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
-            outputStream.close()
+            mediaMetadataRetriever.setDataSource(applicationContext, videoUri)
+            mediaMetadataRetriever.getFrameAtTime(videoPosition * 1000L, MediaMetadataRetriever.OPTION_CLOSEST)?.let{ frameBitmap ->
+                @Suppress("DEPRECATION")
+                val picturesDirectory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                val fileFullPath = "$picturesDirectory/$fileName"
 
-            val values = ContentValues()
-            @Suppress("DEPRECATION")
-            values.put(MediaStore.Images.Media.DATA, fileFullPath)
-            values.put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-            val newUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-            success = newUri != null
+                val outputStream = File(fileFullPath).outputStream()
+                frameBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                outputStream.close()
+
+                val values = ContentValues()
+                @Suppress("DEPRECATION")
+                values.put(MediaStore.Images.Media.DATA, fileFullPath)
+                values.put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                val newUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                success = newUri != null
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
 
+        runOnUiThread {
+            BusyDialog.dismiss()
+            Toast.makeText(applicationContext, if (success) "Saved: $fileName" else "Failed !", Toast.LENGTH_LONG).show()
+        }
+    }
 
-        Toast.makeText(applicationContext, if (success) "Saved: $fileName" else "Failed !", Toast.LENGTH_LONG ).show()
+    private fun handleSaveFrame() {
+        BusyDialog.show(supportFragmentManager)
+        GlobalScope.launch(Dispatchers.IO) { saveFrame() }
     }
 
     private fun handleOpenVideo() {
@@ -193,17 +223,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openVideo(videoUri: Uri) {
+        mediaPlayer = null
         this.videoUri = videoUri
-        mediaMetadataRetriever.setDataSource(applicationContext, videoUri)
-        nbOfFrames = mediaMetadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)?.toInt() ?: 0
+        binding.videoView.setVideoURI(videoUri)
+        videoDuration = 0
         videoName = DocumentFile.fromSingleUri(applicationContext, videoUri)?.name ?: ""
-
-        Log.i("[VideoFrame]", "nbOfFrames: ${nbOfFrames}")
         updateAll()
     }
 
     private fun updateAll() {
-        val enabled = nbOfFrames > 0
+        val enabled = videoDuration > 0
 
         binding.seekBarPosition.isEnabled = enabled
         binding.seekBarPosition.progress = 0
@@ -213,50 +242,25 @@ class MainActivity : AppCompatActivity() {
         binding.buttonSubMin.isEnabled = enabled
         binding.buttonSubMed.isEnabled = enabled
         binding.buttonSubMax.isEnabled = enabled
-        saveFrameMenuItem?.isEnabled = false
+        saveFrameMenuItem?.isEnabled = enabled
         binding.txtVideoName.text = if (enabled) videoName else ""
-        binding.txtFrameIndex.text = ""
 
         if (enabled) {
-            binding.seekBarPosition.max = nbOfFrames
-            setFrameIndex(0, true)
+            binding.seekBarPosition.max = videoDuration
+            setVideoPosition(0, true)
         }
     }
 
-    private fun shiftFrameIndex(delta: Int) {
-        setFrameIndex(frameIndex + delta)
+    private fun shiftVideoPosition(delta: Int) {
+        setVideoPosition(videoPosition + delta)
     }
 
-    private fun setFrameIndex(newFrameIndex: Int, force: Boolean = false) {
-        if (!force && newFrameIndex == this.frameIndex) return
-        if (newFrameIndex < 0 || newFrameIndex >= nbOfFrames) return
+    private fun setVideoPosition(newVideoPosition: Int, force: Boolean = false) {
+        if (!force && newVideoPosition == this.videoPosition) return
+        if (newVideoPosition < 0 || newVideoPosition >= videoDuration || videoDuration <= 0) return
 
-        binding.txtFrameIndex.text = newFrameIndex.toString()
-        this.frameIndex = newFrameIndex
-        val currentVideoUri = this.videoUri
-        binding.seekBarPosition.progress = frameIndex
-        saveFrameMenuItem?.isEnabled = false
-
-        GlobalScope.launch(Dispatchers.IO) {
-            var newFrameBitamp: Bitmap? = null
-
-            try {
-                newFrameBitamp = mediaMetadataRetriever.getFrameAtIndex(frameIndex)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-
-            runOnUiThread {
-                if (frameIndex == newFrameIndex && videoUri == currentVideoUri) {
-                    frameBitamp = newFrameBitamp
-                    if (null == newFrameBitamp) {
-                        binding.imageView.setImageResource(android.R.drawable.ic_menu_gallery)
-                    } else {
-                        binding.imageView.setImageBitmap(newFrameBitamp)
-                        saveFrameMenuItem?.isEnabled = true
-                    }
-                }
-            }
-        }
+        this.videoPosition = newVideoPosition
+        binding.seekBarPosition.progress = newVideoPosition
+        mediaPlayer?.seekTo(videoPosition.toLong(), MediaPlayer.SEEK_CLOSEST)
     }
 }

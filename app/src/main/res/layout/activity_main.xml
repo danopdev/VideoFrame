@@ -17,13 +17,6 @@
             android:textAppearance="@style/TextAppearance.AppCompat.Large"
             android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/txtFrameIndex"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textAlignment="center"
-            android:textStyle="bold" />
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -36,7 +29,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="-30"
+                android:text="&lt;&lt;&lt;"
                 android:textColor="@color/purple_700" />
 
             <Button
@@ -45,7 +38,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="-5"
+                android:text="&lt;&lt;"
                 android:textColor="@color/purple_700" />
 
             <Button
@@ -54,7 +47,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="-1"
+                android:text="&lt;"
                 android:textColor="@color/purple_700" />
 
             <Button
@@ -63,7 +56,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="+1"
+                android:text="&gt;"
                 android:textColor="@color/purple_700" />
 
             <Button
@@ -72,7 +65,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="+5"
+                android:text="&gt;&gt;"
                 android:textColor="@color/purple_700" />
 
             <Button
@@ -81,7 +74,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="+30"
+                android:text="&gt;&gt;&gt;"
                 android:textColor="@color/purple_700" />
         </LinearLayout>
 
@@ -91,15 +84,13 @@
             android:layout_height="wrap_content"
             android:padding="16dip" />
 
-        <ImageView
-            android:id="@+id/imageView"
+        <VideoView
+            android:id="@+id/videoView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_margin="16dp"
             android:adjustViewBounds="false"
-            android:baselineAlignBottom="false"
-            android:scaleType="fitCenter"
-            app:srcCompat="@android:drawable/ic_menu_gallery" />
+            android:scaleType="fitCenter" />
     </LinearLayout>
 
 </layout>
